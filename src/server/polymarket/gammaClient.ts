@@ -241,6 +241,12 @@ export async function getActiveMarkets(
  */
 export async function syncMarketsToDb(): Promise<void> {
   try {
+    // Skip DB sync if prisma is not available (e.g., during build or without DATABASE_URL)
+    if (!prisma) {
+      console.log('[GAMMA] Skipping DB sync: Prisma client not available')
+      return
+    }
+
     const markets = await getActiveMarkets()
 
     for (const market of markets) {
