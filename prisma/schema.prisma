@@ -1,0 +1,98 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  address   String   @unique // Ethereum wallet address
+  createdAt DateTime @default(now())
+
+  parlays Parlay[]
+
+  @@index([address])
+}
+
+model Market {
+  id         String   @id // Polymarket market/condition ID
+  eventId    String?
+  question   String
+  outcomes   Json     // Array of outcome objects: [{ name: "YES", ... }, { name: "NO", ... }]
+  endTime    DateTime?
+  status     String   // "open" | "resolved" | "closed"
+  extra      Json?    // Additional market metadata from Gamma API
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  parlayLegs    ParlayLeg[]
+  orderSnapshots OrderSnapshot[]
+
+  @@index([status])
+  @@index([endTime])
+}
+
+model Parlay {
+  id             String    @id @default(uuid())
+  userAddress    String
+  stake          Float     // USDC amount
+  kTotal         Float     // Combined odds multiplier
+  expectedPayout Float
+  actualPayout   Float?
+  realizedPnl    Float?    // actualPayout - stake (profit/loss)
+  maxSlippageBps Int       // Maximum slippage in basis points (100 = 1%)
+  status         String    // "draft" | "pending_signature" | "active" | "won" | "lost" | "failed"
+  resolvedAt     DateTime? // When parlay was resolved (won/lost)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user          User           @relation(fields: [userAddress], references: [address], onDelete: Cascade)
+  legs          ParlayLeg[]
+  orderSnapshots OrderSnapshot[]
+
+  @@index([userAddress])
+  @@index([status])
+}
+
+model ParlayLeg {
+  id           String  @id @default(uuid())
+  parlayId     String
+  marketId     String
+  outcomeIndex Int     // Index in the outcomes array (0 for YES, 1 for NO, etc.)
+  priceUsed    Float   // Price at the time of parlay creation
+  size         Float   // Position size
+
+  parlay Parlay @relation(fields: [parlayId], references: [id], onDelete: Cascade)
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([parlayId])
+  @@index([marketId])
+}
+
+model OrderSnapshot {
+  id          String   @id @default(uuid())
+  parlayId    String
+  marketId    String
+  clobOrderId String?  // CLOB order ID from Polymarket
+  side        String   // "BUY" | "SELL"
+  price       Float
+  size        Float
+  status      String   // "pending" | "filled" | "cancelled" | "failed"
+  raw         Json?    // Raw order data from CLOB API
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parlay Parlay @relation(fields: [parlayId], references: [id], onDelete: Cascade)
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([parlayId])
+  @@index([marketId])
+  @@index([clobOrderId])
+}
+
